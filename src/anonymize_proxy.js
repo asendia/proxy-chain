@@ -13,7 +13,7 @@ const anonymizedProxyUrlToServer = {};
  * @return If no callback was supplied, returns a promise that resolves to a String with
  * anonymous proxy URL or the original URL if it was already anonymous.
  */
-export const anonymizeProxy = (proxyUrl, callback) => {
+export const anonymizeProxy = (proxyUrl, callback, options={}) => {
     const parsedProxyUrl = parseUrl(proxyUrl);
     if (!parsedProxyUrl.host || !parsedProxyUrl.port) {
         throw new Error('Invalid "proxyUrl" option: the URL must contain both hostname and port.');
@@ -33,7 +33,7 @@ export const anonymizeProxy = (proxyUrl, callback) => {
     const startServer = (maxRecursion) => {
         return Promise.resolve()
             .then(() => {
-                return findFreePort();
+                return options.port || findFreePort();
             })
             .then((result) => {
                 port = result;
@@ -53,7 +53,7 @@ export const anonymizeProxy = (proxyUrl, callback) => {
             .catch((err) => {
                 // It might happen that the port was taken in the meantime,
                 // in which case retry the search
-                if (err.code === 'EADDRINUSE' && maxRecursion > 0) {
+                if (!options.port && err.code === 'EADDRINUSE' && maxRecursion > 0) {
                     return startServer(maxRecursion - 1);
                 }
                 throw err;
