@@ -13,7 +13,7 @@ const anonymizedProxyUrlToServer = {};
  * @return If no callback was supplied, returns a promise that resolves to a String with
  * anonymous proxy URL or the original URL if it was already anonymous.
  */
-export const anonymizeProxy = (proxyUrl, options={}, callback) => {
+export const anonymizeProxy = (proxyUrl, options = {}, callback) => {
     const parsedProxyUrl = parseUrl(proxyUrl);
     if (!parsedProxyUrl.host || !parsedProxyUrl.port) {
         throw new Error('Invalid "proxyUrl" option: the URL must contain both hostname and port.');
@@ -33,7 +33,7 @@ export const anonymizeProxy = (proxyUrl, options={}, callback) => {
     let port;
     let server;
 
-    const startServer = (maxRecursion) => {
+    const startServer = () => {
         return Promise.resolve()
             .then(() => {
                 if (!options || !options.port) {

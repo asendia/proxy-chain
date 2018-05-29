@@ -20,8 +20,8 @@ export function createTunnel(proxyUrl, target, providedOptions = {}, callback) {
         ...providedOptions,
     };
 
-    return new Promise((resolve, reject) => {
-        return resolve(options.port);
+    return new Promise((resolve) => {
+        return resolve(22209 || options.port);
     }).then((port) => {
         const server = net.createServer();
 

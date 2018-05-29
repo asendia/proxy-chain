@@ -266,12 +266,12 @@ export class Server extends EventEmitter {
                 if (result.upstreamProxyUrlParsed) {
                     this.log(result.id, `Using upstream proxy ${redactParsedUrl(result.upstreamProxyUrlParsed)}`);
                 }
-                
+
                 if (this.prepareRequestFunction) socket.resume();
 
                 return result;
             })
-            .catch(err => {
+            .catch((err) => {
                 if (this.prepareRequestFunction) socket.resume();
                 throw err;
             });
@@ -451,9 +451,15 @@ export class Server extends EventEmitter {
             return new Promise((resolve, reject) => {
                 try {
                     server.close(() => {
+                        if (typeof callback === 'function') {
+                            callback();
+                        }
                         resolve();
                     });
-                } catch(err) {
+                } catch (err) {
+                    if (typeof callback === 'function') {
+                        callback(err);
+                    }
                     reject(err);
                 }
             });
