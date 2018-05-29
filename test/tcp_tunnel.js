@@ -3,10 +3,8 @@ import net from 'net';
 import { expect, assert } from 'chai';
 import http from 'http';
 import proxy from 'proxy';
-import Promise from 'bluebird';
 
 import { createTunnel, closeTunnel } from '../build/tcp_tunnel';
-import { findFreePort } from '../build/tools';
 
 const destroySocket = socket => new Promise((resolve, reject) => {
     if (!socket || socket.destroyed) return resolve();
@@ -70,13 +68,13 @@ describe('tcp_tunnel.createTunnel', () => {
     it('correctly tunnels to tcp service and then is able to close the connection', () => {
         let proxyPort;
         let servicePort;
-        return findFreePort()
+        return Promise.resolve(24201)
             .then((port) => {
                 proxyServer = proxy(http.createServer());
                 proxyPort = port;
                 return serverListen(proxyServer, proxyPort);
             })
-            .then(() => findFreePort())
+            .then(() => Promise.resolve(26201))
             .then((port) => {
                 targetService = net.createServer();
                 servicePort = port;
@@ -88,20 +86,20 @@ describe('tcp_tunnel.createTunnel', () => {
                 return serverListen(targetService, servicePort);
             })
             .then(() => {
-                return createTunnel(`http://localhost:${proxyPort}`, `localhost:${servicePort}`);
+                return createTunnel(`http://localhost:${proxyPort}`, `localhost:${servicePort}`, { port: 23981 });
             })
             .then(closeTunnel);
     });
     it('correctly tunnels to tcp service and then is able to close the connection when used with callbacks', () => {
         let proxyPort;
         let servicePort;
-        return findFreePort()
+        return Promise.resolve(20212)
             .then((port) => {
                 proxyServer = proxy(http.createServer());
                 proxyPort = port;
                 return serverListen(proxyServer, proxyPort);
             })
-            .then(() => findFreePort())
+            .then(() => Promise.resolve(30202))
             .then((port) => {
                 targetService = net.createServer();
                 servicePort = port;
@@ -113,7 +111,7 @@ describe('tcp_tunnel.createTunnel', () => {
                 return serverListen(targetService, servicePort);
             })
             .then(() => new Promise((resolve, reject) => {
-                createTunnel(`http://localhost:${proxyPort}`, `localhost:${servicePort}`, {}, (err, tunnel) => {
+                createTunnel(`http://localhost:${proxyPort}`, `localhost:${servicePort}`, { port: 23976 }, (err, tunnel) => {
                     if (err) return reject(err);
                     return resolve(tunnel);
                 });
@@ -121,7 +119,7 @@ describe('tcp_tunnel.createTunnel', () => {
             .then(tunnel => new Promise((resolve, reject) => {
                 closeTunnel(tunnel, true, (err, closed) => {
                     if (err) return reject(err);
-                    return resolve(closed);
+                    return resolve(null, closed);
                 });
             })));
     });
@@ -135,14 +133,14 @@ describe('tcp_tunnel.createTunnel', () => {
             'testB',
             'testC',
         ];
-        return findFreePort()
+        return Promise.resolve(20215)
             .then((port) => {
                 proxyServer = proxy(http.createServer());
                 proxyServer.on('connection', conn => proxyServerConnections.push(conn));
                 proxyPort = port;
                 return serverListen(proxyServer, proxyPort);
             })
-            .then(() => findFreePort())
+            .then(() => Promise.resolve(20206))
             .then((port) => {
                 targetService = net.createServer();
                 servicePort = port;
@@ -154,7 +152,7 @@ describe('tcp_tunnel.createTunnel', () => {
                 });
                 return serverListen(targetService, servicePort);
             })
-            .then(() => createTunnel(`http://localhost:${proxyPort}`, `localhost:${servicePort}`))
+            .then(() => createTunnel(`http://localhost:${proxyPort}`, `localhost:${servicePort}`, { port: 34976 }))
             .then((newTunnel) => {
                 tunnel = newTunnel;
                 const [hostname, port] = tunnel.split(':'); // eslint-disable-line

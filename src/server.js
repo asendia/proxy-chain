@@ -1,7 +1,6 @@
 import http from 'http';
 import EventEmitter from 'events';
 import _ from 'underscore';
-import Promise from 'bluebird';
 import { parseHostHeader, parseProxyAuthorizationHeader, parseUrl, redactParsedUrl } from './tools';
 import HandlerForward from './handler_forward';
 import HandlerTunnelDirect from './handler_tunnel_direct';
@@ -267,11 +266,14 @@ export class Server extends EventEmitter {
                 if (result.upstreamProxyUrlParsed) {
                     this.log(result.id, `Using upstream proxy ${redactParsedUrl(result.upstreamProxyUrlParsed)}`);
                 }
+                
+                if (this.prepareRequestFunction) socket.resume();
 
                 return result;
             })
-            .finally(() => {
+            .catch(err => {
                 if (this.prepareRequestFunction) socket.resume();
+                throw err;
             });
     }
 
@@ -393,8 +395,10 @@ export class Server extends EventEmitter {
             this.server.on('error', onError);
             this.server.on('listening', onListening);
             this.server.listen(this.port);
-        })
-        .nodeify(callback);
+            if (typeof callback === 'function') {
+                callback();
+            }
+        });
     }
 
     /**
@@ -444,7 +448,15 @@ export class Server extends EventEmitter {
         if (this.server) {
             const server = this.server;
             this.server = null;
-            return Promise.promisify(server.close).bind(server)().nodeify(callback);
+            return new Promise((resolve, reject) => {
+                try {
+                    server.close(() => {
+                        resolve();
+                    });
+                } catch(err) {
+                    reject(err);
+                }
+            });
         }
     }
 }

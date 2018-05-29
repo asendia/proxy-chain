@@ -3,7 +3,6 @@ import https from 'https';
 import express from 'express';
 import bodyParser from 'body-parser';
 import WebSocket from 'ws';
-import Promise from 'bluebird';
 import basicAuth from 'basic-auth';
 import _ from 'underscore';
 
@@ -51,7 +50,11 @@ export class TargetServer {
     }
 
     listen() {
-        return Promise.promisify(this.httpServer.listen).bind(this.httpServer)(this.port);
+        return new Promise(resolve => {
+            this.httpServer.listen(this.port, () => {
+                resolve(this.port);
+            });
+        })
     }
 
     allHelloWorld(request, response) {
@@ -166,6 +169,10 @@ export class TargetServer {
     }
 
     close() {
-        return Promise.promisify(this.httpServer.close).bind(this.httpServer)();
+        return new Promise(resolve => {
+            this.httpServer.close(() => {
+                resolve();
+            });
+        });
     }
 }

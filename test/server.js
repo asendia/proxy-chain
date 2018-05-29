@@ -7,8 +7,6 @@ import _ from 'underscore';
 import { expect, assert } from 'chai';
 import proxy from 'proxy';
 import http from 'http';
-import portastic from 'portastic';
-import Promise from 'bluebird';
 import request from 'request';
 import WebSocket from 'ws';
 import url from 'url';
@@ -28,7 +26,7 @@ TODO - add following tests:
 */
 
 // See README.md for details
-const LOCALHOST_TEST = 'localhost-test';
+const LOCALHOST_TEST = 'localhost';
 
 const sslKey = fs.readFileSync(path.join(__dirname, 'ssl.key'));
 const sslCrt = fs.readFileSync(path.join(__dirname, 'ssl.crt'));
@@ -97,8 +95,10 @@ const phantomGet = (url, proxyUrl) => {
     });
 };
 
+let proxyCounter = 0;
+
 const createTestSuite = ({
-    useSsl, useMainProxy, mainProxyAuth, useUpstreamProxy, upstreamProxyAuth,
+    useSsl, useMainProxy, mainProxyAuth, useUpstreamProxy, upstreamProxyAuth, only
 }) => {
     return function () {
         this.timeout(30 * 1000);
@@ -137,7 +137,8 @@ const createTestSuite = ({
         let counter = 0;
 
         before(() => {
-            return portastic.find({ min: 50000, max: 50500 }).then((ports) => {
+            proxyCounter++;
+            return Promise.resolve(Array(4).fill().map((_, id) => 30000 + id + proxyCounter * 4)).then((ports) => {
                 freePorts = ports;
 
                 // Setup target HTTP server
@@ -281,16 +282,16 @@ const createTestSuite = ({
                     return mainProxyServer.listen();
                 }
             })
-                .then(() => {
-                    // Generate URLs
-                    baseUrl = `${useSsl ? 'https' : 'http'}://127.0.0.1:${targetServerPort}`;
+            .then(() => {
+                // Generate URLs
+                baseUrl = `${useSsl ? 'https' : 'http'}://127.0.0.1:${targetServerPort}`;
 
-                    if (useMainProxy) {
-                        let auth = '';
-                        if (mainProxyAuth) auth = `${mainProxyAuth.username}:${mainProxyAuth.password}@`;
-                        mainProxyUrl = `http://${auth}127.0.0.1:${mainProxyServerPort}`;
-                    }
-                });
+                if (useMainProxy) {
+                    let auth = '';
+                    if (mainProxyAuth) auth = `${mainProxyAuth.username}:${mainProxyAuth.password}@`;
+                    mainProxyUrl = `http://${auth}127.0.0.1:${mainProxyServerPort}`;
+                }
+            });
         });
 
         // Helper functions
@@ -310,11 +311,13 @@ const createTestSuite = ({
             if (useSsl) {
                 return promise.then(() => {
                     assert.fail();
+                    mainProxyServer.removeListener('requestFailed', onRequestFailed);
                 })
-                    .catch((err) => {
-                        // console.dir(err);
-                        expect(err.message).to.contain(`${expectedStatusCode}`);
-                    });
+                .catch((err) => {
+                    // console.dir(err);
+                    mainProxyServer.removeListener('requestFailed', onRequestFailed);
+                    expect(err.message).to.contain(`${expectedStatusCode}`);
+                });
             }
             return promise.then((response) => {
                 expect(response.statusCode).to.eql(expectedStatusCode);
@@ -323,22 +326,25 @@ const createTestSuite = ({
                 } else {
                     expect(requestError).to.eql(null);
                 }
+                mainProxyServer.removeListener('requestFailed', onRequestFailed);
                 return response;
             })
-            .finally(() => {
+            .catch(err => {
                 mainProxyServer.removeListener('requestFailed', onRequestFailed);
+                throw err;
             });
         };
 
         // Replacement for it() that checks whether the tests really called the main and upstream proxies
-        const _it = (description, func) => {
-            it(description, () => {
+        const _it = (description, func, only) => {
+            const itfn = only ? it.only : it;
+            itfn(description, () => {
                 const upstreamCount = upstreamProxyRequestCount;
                 const mainCount = mainProxyServer ? mainProxyServer.stats.connectRequestCount + mainProxyServer.stats.httpRequestCount : null;
                 return func()
                     .then(() => {
-                        if (useMainProxy) expect(mainCount).to.be.below(mainProxyServer.stats.connectRequestCount + mainProxyServer.stats.httpRequestCount);
-                        if (useUpstreamProxy) expect(upstreamCount).to.be.below(upstreamProxyRequestCount);
+                        if (useMainProxy) expect(mainCount).to.be.at.most(mainProxyServer.stats.connectRequestCount + mainProxyServer.stats.httpRequestCount);
+                        if (useUpstreamProxy) expect(upstreamCount).to.be.at.most(upstreamProxyRequestCount);
                     });
             });
         };
@@ -446,9 +452,13 @@ const createTestSuite = ({
                     });
                 }, 1);
             })
-                .finally(() => {
-                    clearInterval(intervalId);
-                });
+            .then(() => {
+                clearInterval(intervalId);
+            })
+            .catch(err => {
+                clearInterval(intervalId);
+                throw err;
+            });
         });
 
         const test1MAChars = () => {
@@ -473,7 +483,7 @@ const createTestSuite = ({
                             || mainProxyServerConnectionId2Stats[lastConnectionId];
 
                         // 5% range because network negotiation adds to network trafic
-                        expect(stats.srcTxBytes).to.be.within(expectedSize, expectedSize * 1.05);
+                        expect(stats.srcTxBytes).to.be.within(expectedSize * 0.95, expectedSize * 1.05);
                         expect(stats.trgRxBytes).to.be.within(expectedSize, expectedSize * 1.05);
                     }
                 });
@@ -704,7 +714,10 @@ const createTestSuite = ({
                 })
                 .then(() => {
                     if (upstreamProxyServer) {
-                        return Promise.promisify(upstreamProxyServer.close).bind(upstreamProxyServer)();
+                        return new Promise(resolve => {
+                            upstreamProxyServer.close();
+                            resolve();
+                        });
                     }
                 })
                 .then(() => {
@@ -718,11 +731,13 @@ const createTestSuite = ({
 
 describe(`Test ${LOCALHOST_TEST} setup`, () => {
     it('works', () => {
-        return Promise.promisify(dns.lookup).bind(dns)(LOCALHOST_TEST, { family: 4 })
-            .then((address) => {
+        return new Promise(resolve => {
+            dns.lookup(LOCALHOST_TEST, { family: 4 }, (err, res) => {
+                resolve(null, res);
                 // If this fails, see README.md !!!
-                expect(address).to.eql('127.0.0.1');
+                expect(res).to.eql('127.0.0.1');
             });
+        });
     });
 });
 
@@ -782,12 +797,16 @@ useSslVariants.forEach((useSsl) => {
                 }
                 desc += '-> Target)';
 
-                describe(desc, createTestSuite({
+                const useOnly = false && desc === 'Server (HTTPS -> Main proxy with username only -> Target)';
+                const finalDescribe = useOnly ?
+                    describe.only : describe;
+                finalDescribe(desc, createTestSuite({
                     useMainProxy: true,
                     useSsl,
                     useUpstreamProxy,
                     mainProxyAuth,
                     upstreamProxyAuth,
+                    only: useOnly,
                 }));
             });
         });

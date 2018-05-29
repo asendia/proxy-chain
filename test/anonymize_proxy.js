@@ -2,9 +2,7 @@ import _ from 'underscore';
 import { expect, assert } from 'chai';
 import proxy from 'proxy';
 import http from 'http';
-import portastic from 'portastic';
 import basicAuthParser from 'basic-auth-parser';
-import Promise from 'bluebird';
 import request from 'request';
 import express from 'express';
 
@@ -25,7 +23,7 @@ let wasProxyCalled = false; // eslint-disable-line no-unused-vars
 before(() => {
     // Find free port for the proxy
     let freePorts;
-    return portastic.find({ min: 50000, max: 50100 })
+    return Promise.resolve([20201, 20202])
         .then((result) => {
             freePorts = result;
             return new Promise((resolve, reject) => {
@@ -74,7 +72,10 @@ before(() => {
 
 after(function () {
     this.timeout(5 * 1000);
-    if (proxyServer) return Promise.promisify(proxyServer.close).bind(proxyServer)();
+    if (proxyServer) return new Promise(resolve => {
+        proxyServer.close();
+        resolve();
+    });
 });
 
 
@@ -120,14 +121,14 @@ describe('utils.anonymizeProxy', function () {
     it('keeps already anonymous proxies (both with callbacks and promises)', () => {
         return Promise.resolve()
             .then(() => {
-                return anonymizeProxy('http://whatever:4567');
+                return anonymizeProxy('http://whatever:4567', { port: 4567 });
             })
             .then((anonymousProxyUrl) => {
                 expect(anonymousProxyUrl).to.eql('http://whatever:4567');
             })
             .then(() => {
                 return new Promise((resolve, reject) => {
-                    anonymizeProxy('http://whatever:4567', (err, result) => {
+                    anonymizeProxy('http://whatever:4567', { port: 30335 }, (err, result) => {
                         if (err) return reject(err);
                         resolve(result);
                     });
@@ -144,9 +145,9 @@ describe('utils.anonymizeProxy', function () {
         return Promise.resolve()
             .then(() => {
                 return Promise.all([
-                    anonymizeProxy(`http://${proxyAuth.username}:${proxyAuth.password}@127.0.0.1:${proxyPort}`),
+                    anonymizeProxy(`http://${proxyAuth.username}:${proxyAuth.password}@127.0.0.1:${proxyPort}`, { port: 34136 }),
                     new Promise((resolve, reject) => {
-                        anonymizeProxy(`http://${proxyAuth.username}:${proxyAuth.password}@127.0.0.1:${proxyPort}`, (err, result) => {
+                        anonymizeProxy(`http://${proxyAuth.username}:${proxyAuth.password}@127.0.0.1:${proxyPort}`, { port: 45620 }, (err, result) => {
                             if (err) return reject(err);
                             resolve(result);
                         });
@@ -257,7 +258,7 @@ describe('utils.anonymizeProxy', function () {
 
                 const promises = [];
                 for (let i=0; i<N; i++) {
-                    promises.push(anonymizeProxy(`http://${proxyAuth.username}:${proxyAuth.password}@127.0.0.1:${proxyPort}`));
+                    promises.push(anonymizeProxy(`http://${proxyAuth.username}:${proxyAuth.password}@127.0.0.1:${proxyPort}`, { port: 27890 + i }));
                 }
 
                 return Promise.all(promises);
@@ -292,9 +293,11 @@ describe('utils.anonymizeProxy', function () {
                 for (let i=0; i<N; i++) {
                     expect(results[i]).to.eql(true);
                 }
-            })
-            .finally(() => {
                 Object.assign(PORT_SELECTION_CONFIG, ORIG_PORT_SELECTION_CONFIG);
+            })
+            .catch(err => {
+                Object.assign(PORT_SELECTION_CONFIG, ORIG_PORT_SELECTION_CONFIG);
+                throw err;
             });
     });
 
@@ -302,7 +305,7 @@ describe('utils.anonymizeProxy', function () {
         let anonymousProxyUrl;
         return Promise.resolve()
             .then(() => {
-                return anonymizeProxy(`http://username:bad-password@127.0.0.1:${proxyPort}`);
+                return anonymizeProxy(`http://username:bad-password@127.0.0.1:${proxyPort}`, { port: 23026});
             })
             .then((result) => {
                 anonymousProxyUrl = result;

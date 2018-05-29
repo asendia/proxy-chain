@@ -2,9 +2,7 @@ import _ from 'underscore';
 import { expect, assert } from 'chai';
 import proxy from 'proxy';
 import http from 'http';
-import portastic from 'portastic';
 import basicAuthParser from 'basic-auth-parser';
-import Promise from 'bluebird';
 import request from 'request';
 import express from 'express';
 
@@ -25,7 +23,7 @@ let wasProxyCalled = false; // eslint-disable-line no-unused-vars
 before(() => {
     // Find free port for the proxy
     let freePorts;
-    return portastic.find({ min: 50000, max: 50100 })
+    return Promise.resolve([20266, 20267])
         .then((result) => {
             freePorts = result;
             return new Promise((resolve, reject) => {
@@ -74,7 +72,10 @@ before(() => {
 
 after(function () {
     this.timeout(5 * 1000);
-    if (proxyServer) return Promise.promisify(proxyServer.close).bind(proxyServer)();
+    if (proxyServer) return new Promise(resolve => {
+        proxyServer.close();
+        resolve();
+    });
 });
 
 
@@ -103,9 +104,9 @@ describe('utils.anonymizeProxyNoPassword', function () {
         return Promise.resolve()
             .then(() => {
                 return Promise.all([
-                    anonymizeProxy(`http://${proxyAuth.username}:${proxyAuth.password}@127.0.0.1:${proxyPort}`),
+                    anonymizeProxy(`http://${proxyAuth.username}:${proxyAuth.password}@127.0.0.1:${proxyPort}`, { port: 20300 }),
                     new Promise((resolve, reject) => {
-                        anonymizeProxy(`http://${proxyAuth.username}:${proxyAuth.password}@127.0.0.1:${proxyPort}`,
+                        anonymizeProxy(`http://${proxyAuth.username}:${proxyAuth.password}@127.0.0.1:${proxyPort}`, { port: 20301 },
                             (err, result) => {
                                 if (err) return reject(err);
                                 resolve(result);

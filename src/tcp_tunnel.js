@@ -1,7 +1,6 @@
-import Promise from 'bluebird';
 import net from 'net';
 import HandlerTunnelTcpChain from './handler_tunnel_tcp_chain';
-import { parseUrl, findFreePort } from './tools';
+import { parseUrl } from './tools';
 
 const runningServers = {};
 
@@ -22,8 +21,7 @@ export function createTunnel(proxyUrl, target, providedOptions = {}, callback) {
     };
 
     return new Promise((resolve, reject) => {
-        if (options.port) return resolve(options.port);
-        findFreePort().then(resolve).catch(reject);
+        return resolve(options.port);
     }).then((port) => {
         const server = net.createServer();
 
@@ -72,12 +70,14 @@ export function createTunnel(proxyUrl, target, providedOptions = {}, callback) {
                 if (err) return reject(err);
                 log('server listening to ', server.address());
                 runningServers[port] = { server, connections: [] };
+                if (typeof callback === 'function') {
+                    callback(null, `${options.hostname}:${port}`);
+                }
                 resolve(`${options.hostname}:${port}`);
             });
         });
     })
-    .catch((err) => { throw err; })
-    .nodeify(callback);
+    .catch((err) => { throw err; });
 }
 
 export function closeTunnel(serverPath, closeConnections, callback) {
@@ -92,11 +92,18 @@ export function closeTunnel(serverPath, closeConnections, callback) {
         resolve();
     })
     .then(serverExists => new Promise((resolve) => {
-        if (!serverExists) return resolve(false);
+        if (!serverExists) {
+            if (typeof callback === 'function') {
+                callback(null, false);
+            }
+            return resolve(false);
+        }
         runningServers[port].close(() => {
             delete runningServers[port];
+            if (typeof callback === 'function') {
+                callback(null, true);
+            }
             resolve(true);
         });
-    }))
-    .nodeify(callback);
+    }));
 }
