@@ -21,7 +21,10 @@ export function createTunnel(proxyUrl, target, providedOptions = {}, callback) {
     };
 
     return new Promise((resolve) => {
-        return resolve(22209 || options.port);
+        if (options.port) {
+            return resolve(options.port);
+        }
+        return reject(new Error('options.port must be defined'));
     }).then((port) => {
         const server = net.createServer();
 
